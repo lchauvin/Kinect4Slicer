@@ -17,6 +17,7 @@
 
 // Qt includes
 #include <QDebug>
+#include <QTimer>
 
 // SlicerQt includes
 #include "qSlicerKinect4SlicerModuleWidget.h"
@@ -30,6 +31,8 @@ class qSlicerKinect4SlicerModuleWidgetPrivate: public Ui_qSlicerKinect4SlicerMod
 {
 public:
   vtkMRMLKinect4SlicerNode* KinectSensor;
+  QTimer* RefreshingTimer;
+
 public:
   qSlicerKinect4SlicerModuleWidgetPrivate();
   ~qSlicerKinect4SlicerModuleWidgetPrivate();
@@ -42,6 +45,7 @@ public:
 qSlicerKinect4SlicerModuleWidgetPrivate::qSlicerKinect4SlicerModuleWidgetPrivate()
 {
   this->KinectSensor = NULL;
+  this->RefreshingTimer = new QTimer();
 }
 
 //-----------------------------------------------------------------------------
@@ -75,6 +79,7 @@ void qSlicerKinect4SlicerModuleWidget::setup()
   d->setupUi(this);
   this->Superclass::setup();
 
+  d->BodyPartSelector->setDisabled(true);
   d->TrackButton->setDisabled(true);
 
   connect(d->InitializeButton, SIGNAL(clicked()),
@@ -85,6 +90,9 @@ void qSlicerKinect4SlicerModuleWidget::setup()
 
   connect(d->TrackButton, SIGNAL(clicked()),
 	  this, SLOT(onTrackButtonClicked()));
+
+  connect(d->RefreshingTimer, SIGNAL(timeout()),
+    this, SLOT(refreshKinectNodes()));
 }
 
 //-----------------------------------------------------------------------------
@@ -94,15 +102,13 @@ void qSlicerKinect4SlicerModuleWidget::onInitializeButtonClicked()
 
   if (this->mrmlScene())
     {
-    std::cerr << "Mrml scene ok" << std::endl;
     d->KinectSensor = vtkMRMLKinect4SlicerNode::New();
     if (d->KinectSensor)
 	    {   
-      std::cerr << "Kinect sensor ok" << std::endl;
 	    int init = d->KinectSensor->Initialize(this->mrmlScene());
 	    if (init > 0)
         {
-        std::cerr << "Init succeed" << std::endl;
+        d->BodyPartSelector->setEnabled(true);
         d->TrackButton->setEnabled(true);
         }
 	     }
@@ -124,4 +130,26 @@ void qSlicerKinect4SlicerModuleWidget::onBodyPartChanged(int newBodyPart)
 void qSlicerKinect4SlicerModuleWidget::onTrackButtonClicked()
 {
   Q_D(qSlicerKinect4SlicerModuleWidget);
+
+  if (d->KinectSensor)
+    {
+    if (d->RefreshingTimer->isActive())
+      {
+      d->RefreshingTimer->stop();
+      }
+    d->KinectSensor->UpdateTrackedNodes();
+    d->RefreshingTimer->start(50);
+    }
 }
+
+//-----------------------------------------------------------------------------
+void qSlicerKinect4SlicerModuleWidget::refreshKinectNodes()
+  {
+  Q_D(qSlicerKinect4SlicerModuleWidget);
+
+  if (d->KinectSensor)
+    {
+    d->KinectSensor->UpdateNodesPosition();
+    }
+  }
+

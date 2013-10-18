@@ -42,6 +42,7 @@ public slots:
   void onInitializeButtonClicked();
   void onBodyPartChanged(int newBodyPart);
   void onTrackButtonClicked();
+  void refreshKinectNodes();
 
 protected:
   QScopedPointer<qSlicerKinect4SlicerModuleWidgetPrivate> d_ptr;

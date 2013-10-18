@@ -22,6 +22,7 @@ vtkMRMLKinect4SlicerNode::vtkMRMLKinect4SlicerNode()
 //----------------------------------------------------------------------------
 vtkMRMLKinect4SlicerNode::~vtkMRMLKinect4SlicerNode()
   {
+  this->ClearTrackingNodes();
   }
 
 //----------------------------------------------------------------------------
@@ -79,6 +80,13 @@ int vtkMRMLKinect4SlicerNode::Initialize(vtkMRMLScene* scene)
     return 0;
     }
 
+  HRESULT status = this->KinectSensor ? this->KinectSensor->NuiStatus() : E_NUI_NOTCONNECTED;
+  if (status == E_NUI_NOTCONNECTED)
+    {
+    this->KinectSensor->Release();
+    return 0;
+    }
+
   // Initialize sensor
   HRESULT init;
   init = this->KinectSensor->NuiInitialize(
@@ -87,6 +95,7 @@ int vtkMRMLKinect4SlicerNode::Initialize(vtkMRMLScene* scene)
  
   if (FAILED(init))
     {
+    this->KinectSensor->Release();
     return 0;
     }
 
@@ -118,13 +127,10 @@ int vtkMRMLKinect4SlicerNode::Initialize(vtkMRMLScene* scene)
   }
 
 //---------------------------------------------------------------------------
-void vtkMRMLKinect4SlicerNode::BeginTracking()
+void vtkMRMLKinect4SlicerNode::UpdateTrackedNodes()
   {
 
-  if (this->AlreadyTracking)
-    {
-    this->ClearTracking();
-    }
+  this->ClearTrackingNodes();
 
   switch (this->BodyPartIndex)
     {
@@ -159,42 +165,136 @@ void vtkMRMLKinect4SlicerNode::BeginTracking()
   }
 
 
+void vtkMRMLKinect4SlicerNode::ClearTrackingNodes()
+  {
+  for (int i = 0; i < this->BodyJointPositions.size(); ++i)
+    {
+    vtkMRMLKinectPositionNode* tmpNode = this->BodyJointPositions[i];
+    if (tmpNode)
+      {
+      tmpNode->Delete();
+      }
+    }
+  this->BodyJointPositions.clear();
+  }
+
 void vtkMRMLKinect4SlicerNode::TrackHead()
   {
   // Head: 1 Node
+  vtkMRMLKinectPositionNode* head
+    = vtkMRMLKinectPositionNode::New();
+  head->SetSkeletonPositionIndex(NUI_SKELETON_POSITION_HEAD);
+  head->Initialize(this->GetScene(),"Head");
+  this->BodyJointPositions.push_back(head);
   }
 
 void vtkMRMLKinect4SlicerNode::TrackRightHand()
   {
   // Right hand: 1 Node
+  vtkMRMLKinectPositionNode* rightHand
+    = vtkMRMLKinectPositionNode::New();
+  rightHand->SetSkeletonPositionIndex(NUI_SKELETON_POSITION_HAND_RIGHT);
+  rightHand->Initialize(this->GetScene(),"RightHand");
+  this->BodyJointPositions.push_back(rightHand);
   }
 
 void vtkMRMLKinect4SlicerNode::TrackLeftHand()
   {
   // Left hand: 1 Node
+  vtkMRMLKinectPositionNode* leftHand
+    = vtkMRMLKinectPositionNode::New();
+  leftHand->SetSkeletonPositionIndex(NUI_SKELETON_POSITION_HAND_LEFT);
+  leftHand->Initialize(this->GetScene(),"LeftHand");
+  this->BodyJointPositions.push_back(leftHand);
   }
 
 void vtkMRMLKinect4SlicerNode::TrackBothHands()
   {
   // Both hands: 2 Nodes
+  this->TrackRightHand();
+  this->TrackLeftHand();
   }
 
 void vtkMRMLKinect4SlicerNode::TrackRightArm()
   {
   // Right arm: 3 Nodes
+  vtkMRMLKinectPositionNode* rightShoulder
+    = vtkMRMLKinectPositionNode::New();
+  rightShoulder->SetSkeletonPositionIndex(NUI_SKELETON_POSITION_SHOULDER_RIGHT);
+  rightShoulder->Initialize(this->GetScene(),"RightShoulder");
+  this->BodyJointPositions.push_back(rightShoulder);
+  
+  vtkMRMLKinectPositionNode* rightElbow
+    = vtkMRMLKinectPositionNode::New();
+  rightElbow->SetSkeletonPositionIndex(NUI_SKELETON_POSITION_ELBOW_RIGHT);
+  rightElbow->Initialize(this->GetScene(),"RightElbow");
+  this->BodyJointPositions.push_back(rightElbow);
+
+  this->TrackRightHand();
   }
 
 void vtkMRMLKinect4SlicerNode::TrackLeftArm()
   {
   // Left arm: 3 Nodes
+  vtkMRMLKinectPositionNode* leftShoulder
+    = vtkMRMLKinectPositionNode::New();
+  leftShoulder->SetSkeletonPositionIndex(NUI_SKELETON_POSITION_SHOULDER_LEFT);
+  leftShoulder->Initialize(this->GetScene(),"LeftShoulder");
+  this->BodyJointPositions.push_back(leftShoulder);
+
+  vtkMRMLKinectPositionNode* leftElbow
+    = vtkMRMLKinectPositionNode::New();
+  leftElbow->SetSkeletonPositionIndex(NUI_SKELETON_POSITION_ELBOW_LEFT);
+  leftElbow->Initialize(this->GetScene(),"LeftElbow");
+  this->BodyJointPositions.push_back(leftElbow);
+  
+  this->TrackLeftHand();
   }
 
 void vtkMRMLKinect4SlicerNode::TrackBothArms()
   {
   // Both arms: 6 Nodes
+  this->TrackRightArm();
+  this->TrackLeftArm();
   }
 
 void vtkMRMLKinect4SlicerNode::TrackBody()
   {
   // Body: ? Nodes
+  }
+
+//---------------------------------------------------------------------------
+void vtkMRMLKinect4SlicerNode::UpdateNodesPosition()
+  {
+  if (this->BodyJointPositions.size() <= 0)
+    {
+    return;
+    }
+
+  NUI_SKELETON_FRAME newFrame;
+  NuiSkeletonGetNextFrame(0, &newFrame);
+
+  const NUI_IMAGE_FRAME* imageFrame;
+  WaitForSingleObject(this->NextVideoFrameEvent, INFINITE);
+  NuiImageStreamGetNextFrame(this->VideoStreamHandle, 0, &imageFrame);
+  
+  for (int i = 0; i < this->BodyJointPositions.size(); ++i)
+    {
+    vtkMRMLKinectPositionNode* updateNode = 
+      this->BodyJointPositions[i];
+    if (updateNode)
+      {
+      for (int i = 0; i < 6; ++i)
+        {
+        if (newFrame.SkeletonData[i].eTrackingState == NUI_SKELETON_TRACKED)
+          {
+          NuiTransformSmooth(&newFrame, NULL);
+          updateNode->UpdatePosition(&newFrame, i);
+          continue;
+          }
+        }
+      }
+    }
+
+  NuiImageStreamReleaseFrame(this->VideoStreamHandle, imageFrame);
   }

@@ -1,7 +1,7 @@
 #ifndef __vtkMRMLKinect4SlicerNode_h
 #define __vtkMRMLKinect4SlicerNode_h
 
-#include <windows.h>
+#include <Windows.h>
 #include "NuiApi.h"
 
 #include "vtkMRML.h"
@@ -52,7 +52,8 @@ public:
   vtkGetMacro(BodyPartIndex, int);
   vtkSetMacro(BodyPartIndex, int);
 
-  void BeginTracking();
+  void UpdateTrackedNodes();
+  void UpdateNodesPosition();
 
 protected:
   vtkMRMLKinect4SlicerNode();
@@ -60,7 +61,7 @@ protected:
   vtkMRMLKinect4SlicerNode(const vtkMRMLKinect4SlicerNode&);
   void operator=(const vtkMRMLKinect4SlicerNode&); 
 
-  void ClearTracking() {};
+  void ClearTrackingNodes();
   void TrackHead();
   void TrackRightHand();
   void TrackRightArm();
